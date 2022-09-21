@@ -9,7 +9,6 @@ Just another Windows Local Privilege Escalation from Service Account to System. 
          JuicyPotatoNG
          by decoder_it & splinter_code
 
-Wrong Argument: --help
 
 Mandatory args:
 -t createprocess call: <t> CreateProcessWithTokenW, <u> CreateProcessAsUser, <*> try both
