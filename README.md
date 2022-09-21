@@ -1,1 +1,33 @@
 # JuicyPotatoNG
+
+Just another Windows Local Privilege Escalation from Service Account to System. Full details at --> https://decoder.cloud/2022/09/21/giving-juicypotato-a-second-chance-juicypotatong/ 
+
+## Usage
+
+```
+
+         JuicyPotatoNG
+         by decoder_it & splinter_code
+
+Wrong Argument: --help
+
+Mandatory args:
+-t createprocess call: <t> CreateProcessWithTokenW, <u> CreateProcessAsUser, <*> try both
+-p <program>: program to launch
+
+
+Optional args:
+-l <port>: COM server listen port (Default 10247)
+-a <argument>: command line argument to pass to program (default NULL)
+-c <CLSID> (Default {854A20FB-2D44-457D-992F-EF13785D2B51})
+
+```
+
+## Demo
+
+![demo](demo.png)
+
+## Authors
+
+* [Andrea Pierini](https://twitter.com/decoder_it)
+* [Antonio Cocomazzi](https://twitter.com/splinter_code)
