@@ -18,7 +18,8 @@ Mandatory args:
 Optional args:
 -l <port>: COM server listen port (Default 10247)
 -a <argument>: command line argument to pass to program (default NULL)
--c <CLSID> (Default {854A20FB-2D44-457D-992F-EF13785D2B51})
+-c <CLSID>: (Default {854A20FB-2D44-457D-992F-EF13785D2B51})
+-i : Interactive Console (valid only with CreateProcessAsUser)
 
 ```
 
