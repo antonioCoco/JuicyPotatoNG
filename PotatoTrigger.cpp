@@ -75,7 +75,7 @@ void PotatoTrigger(PWCHAR clsidStr, PWCHAR comPort, HANDLE hEventWait) {
 		printf("[!] CLSID %S not found. Error Bad path to object. Exiting...\n", clsidStr);
 		exit(-1);
 	}
-	if (hEventWait) WaitForSingleObject(hEventWait, 10000);
+	if (hEventWait) WaitForSingleObject(hEventWait, 1000);
 	IUnknownObj1Ptr->Release();
 	IUnknownObj1.Release();
 	bindCtx->Release();
