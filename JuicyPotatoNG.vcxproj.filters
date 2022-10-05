@@ -30,6 +30,9 @@
     <ClCompile Include="SSPIHooks.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="BruteforceCLSIDs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PotatoTrigger.h">
@@ -42,6 +45,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SSPIHooks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BruteforceCLSIDs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

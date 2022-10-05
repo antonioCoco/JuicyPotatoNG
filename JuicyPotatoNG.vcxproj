@@ -140,6 +140,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BruteforceCLSIDs.cpp" />
     <ClCompile Include="IStorageTrigger.cpp" />
     <ClCompile Include="IUnknownObj.cpp" />
     <ClCompile Include="JuicyPotatoNG.cpp" />
@@ -147,6 +148,7 @@
     <ClCompile Include="SSPIHooks.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BruteforceCLSIDs.h" />
     <ClInclude Include="IStorageTrigger.h" />
     <ClInclude Include="IUnknownObj.h" />
     <ClInclude Include="PotatoTrigger.h" />

