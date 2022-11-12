@@ -158,7 +158,7 @@ HRESULT IStorageTrigger::Stat(STATSTG* pstatstg, DWORD grfStatFlag) {
 	//Allocate from heap because apparently this will get freed in OLE32
 	const wchar_t c_s[] = L"JuicyPotatoNG.stg";
 	wchar_t* s = (wchar_t*)CoTaskMemAlloc(sizeof(c_s));
-	wcscpy_s(s, sizeof(c_s), c_s);
+	wcscpy_s(s, sizeof(c_s) / sizeof(wchar_t), c_s);
 	pstatstg[0].pwcsName = s;
 	return 0;
 }
